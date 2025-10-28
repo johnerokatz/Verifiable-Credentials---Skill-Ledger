@@ -6,6 +6,7 @@
 (define-constant ERR_CREDENTIAL_REVOKED (err u104))
 (define-constant ERR_ISSUER_NOT_AUTHORIZED (err u105))
 (define-constant ERR_INVALID_SKILL_LEVEL (err u106))
+(define-constant ERR_TRANSFER_NOT_ALLOWED (err u107))
 
 (define-data-var credential-id-nonce uint u0)
 (define-data-var skill-badge-id-nonce uint u0)
@@ -314,5 +315,35 @@
       { recipient: recipient }
       { badge-ids: updated-list }
     )
+  )
+)
+
+(define-public (transfer-credential (credential-id uint) (new-recipient principal))
+  (match (map-get? credentials { credential-id: credential-id })
+    credential-data
+    (begin
+      (asserts! (is-eq (get recipient credential-data) tx-sender) ERR_UNAUTHORIZED)
+      (asserts! (not (get is-revoked credential-data)) ERR_CREDENTIAL_REVOKED)
+      (asserts! (not (is-eq tx-sender new-recipient)) ERR_TRANSFER_NOT_ALLOWED)
+      
+      (update-recipient-credentials new-recipient credential-id)
+      
+      (ok (map-set credentials
+        { credential-id: credential-id }
+        (merge credential-data { recipient: new-recipient })
+      ))
+    )
+    ERR_CREDENTIAL_NOT_FOUND
+  )
+)
+
+(define-read-only (can-transfer-credential (credential-id uint) (sender principal))
+  (match (map-get? credentials { credential-id: credential-id })
+    credential-data
+    (and 
+      (is-eq (get recipient credential-data) sender)
+      (not (get is-revoked credential-data))
+    )
+    false
   )
 )
